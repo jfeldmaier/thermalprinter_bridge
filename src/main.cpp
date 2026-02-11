@@ -396,7 +396,11 @@ void handleRoot() {
 
 void handlePrint() {
   if (!SerialBT.connected()) {
-    server.send(503, "application/json", "{\"error\":\"Printer not connected\"}");
+    StaticJsonDocument<64> doc;
+    doc["error"] = "Printer not connected";
+    String json;
+    serializeJson(doc, json);
+    server.send(503, "application/json", json);
     Serial.println("Print request received but printer not connected");
     return;
   }
@@ -404,7 +408,11 @@ void handlePrint() {
   String data = server.arg("plain");
   
   if (data.length() == 0) {
-    server.send(400, "application/json", "{\"error\":\"No data to print\"}");
+    StaticJsonDocument<64> doc;
+    doc["error"] = "No data to print";
+    String json;
+    serializeJson(doc, json);
+    server.send(400, "application/json", json);
     return;
   }
   
@@ -421,8 +429,14 @@ void handlePrint() {
   
   Serial.printf("Sent %d bytes to printer\n", written);
   
-  String response = "{\"success\":true,\"message\":\"Print job sent\",\"bytes\":" + String(written) + "}";
-  server.send(200, "application/json", response);
+  StaticJsonDocument<128> doc;
+  doc["success"] = true;
+  doc["message"] = "Print job sent";
+  doc["bytes"] = written;
+  
+  String json;
+  serializeJson(doc, json);
+  server.send(200, "application/json", json);
 }
 
 void handleConfig() {
@@ -433,10 +447,14 @@ void handleConfig() {
   DeserializationError error = deserializeJson(doc, body);
   
   if (error) {
-    String errorMsg = "{\"error\":\"Invalid JSON: ";
+    StaticJsonDocument<128> errorDoc;
+    String errorMsg = "Invalid JSON: ";
     errorMsg += error.c_str();
-    errorMsg += "\"}";
-    server.send(400, "application/json", errorMsg);
+    errorDoc["error"] = errorMsg;
+    
+    String json;
+    serializeJson(errorDoc, json);
+    server.send(400, "application/json", json);
     return;
   }
   
@@ -455,7 +473,13 @@ void handleConfig() {
   
   saveConfig();
   
-  server.send(200, "application/json", "{\"success\":true,\"message\":\"Configuration saved. Restart device to apply.\"}");
+  StaticJsonDocument<128> responseDoc;
+  responseDoc["success"] = true;
+  responseDoc["message"] = "Configuration saved. Restart device to apply.";
+  
+  String json;
+  serializeJson(responseDoc, json);
+  server.send(200, "application/json", json);
   
   Serial.println("\n--- Configuration Updated ---");
   Serial.printf("AP Mode: %s\n", useAPMode ? "true" : "false");
