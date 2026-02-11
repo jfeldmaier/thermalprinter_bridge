@@ -106,10 +106,19 @@ An ESP32-based gateway that enables sending print jobs via WiFi to a Bluetooth t
 
 ### Web Interface
 
+#### Text Printing
 1. Navigate to the gateway's IP address in a web browser
 2. Enter text in the text area
 3. Click "Send to Printer" button
 4. Text will be printed on the thermal printer
+
+#### Image Printing
+1. Navigate to the gateway's IP address in a web browser
+2. Scroll to the "Print Image" section
+3. Click "Choose Image File" and select an image (JPG, PNG, GIF, etc.)
+4. The image will be automatically converted to black & white and displayed
+5. Click "Print Image" to send it to the printer
+6. Recommended maximum width: 384 pixels (thermal printer standard)
 
 ### REST API
 
@@ -336,6 +345,42 @@ SerialBT.write(0x45); // E
 SerialBT.write(0x00); // Disable
 ```
 
+### Image Printing Requirements
+
+#### Image Format
+- **Input formats**: JPG, PNG, GIF, BMP (any format supported by browser or PIL)
+- **Output format**: 1-bit black & white bitmap (monochrome)
+- **Conversion**: Automatic grayscale conversion with 128 threshold
+- **Width**: Maximum 576 pixels, recommended 384 pixels
+- **Height**: Maximum 2000 pixels (practical limit)
+
+#### Preparing Images for Best Results
+1. **Contrast**: High contrast images work best (black text on white background)
+2. **Resolution**: 384x[auto] pixels recommended for standard thermal printers
+3. **Pre-processing**: Consider using image editing software to:
+   - Increase contrast
+   - Convert to grayscale first
+   - Remove unnecessary details
+   - Adjust brightness
+
+#### Image Format Technical Details
+- The gateway converts images to ESC/POS bitmap format
+- Uses ESC * command with 24-dot double-density mode
+- Each pixel is represented as 1 bit (black or white)
+- Data is sent in horizontal stripes of 24 dots
+
+#### Using the Python Script
+```bash
+# Install dependencies
+pip install Pillow requests
+
+# Print an image
+python3 examples/print_image.py logo.png
+
+# Print with custom width
+python3 examples/print_image.py photo.jpg 320
+```
+
 ## Project Structure / Projektstruktur
 
 ```
@@ -343,6 +388,11 @@ thermalprinter_bridge/
 ├── platformio.ini          # PlatformIO configuration
 ├── src/
 │   └── main.cpp           # Main application code
+├── examples/
+│   ├── print_client.py    # Python text printing example
+│   ├── print_image.py     # Python image printing example
+│   ├── print_client.js    # Node.js printing example
+│   └── print.sh           # Bash script example
 ├── README.md              # This file
 └── LICENSE                # MIT License
 ```
@@ -404,7 +454,7 @@ For issues and questions:
 
 - [ ] mDNS support for easy discovery
 - [ ] HTTPS support for secure communication
-- [ ] Image printing support
+- [x] ~~Image printing support~~ ✅ Implemented!
 - [ ] QR code generation and printing
 - [ ] Multiple printer support
 - [ ] Web-based configuration interface
