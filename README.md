@@ -74,7 +74,7 @@ An ESP32-based gateway that enables sending print jobs via WiFi to a Bluetooth t
 1. **Power on the ESP32** / ESP32 einschalten
 2. **Connect to WiFi Access Point**:
    - SSID: `ThermalPrinter_GW`
-   - Password: `printer123`
+   - Password: `Print$2026!`
 3. **Open browser** and navigate to: `http://192.168.4.1`
 
 ### WiFi Modes / WiFi-Modi
@@ -233,7 +233,7 @@ Edit `src/main.cpp`:
 ```cpp
 // WiFi Settings
 #define DEFAULT_SSID "ThermalPrinter_GW"  // Change AP SSID
-#define DEFAULT_PASSWORD "printer123"      // Change AP password
+#define DEFAULT_PASSWORD "Print$2026!"      // Change AP password
 
 // Printer Settings
 #define PRINTER_BT_NAME "JK-5803P"         // Change printer Bluetooth name

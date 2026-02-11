@@ -7,7 +7,7 @@
 
 // Configuration
 #define DEFAULT_SSID "ThermalPrinter_GW"
-#define DEFAULT_PASSWORD "printer123"
+#define DEFAULT_PASSWORD "Print$2026!"
 #define WEB_SERVER_PORT 80
 #define PRINTER_BT_NAME "JK-5803P"
 
@@ -183,11 +183,13 @@ void setupWebServer() {
   server.on("/print", HTTP_POST, handlePrint);
   server.on("/config", HTTP_POST, handleConfig);
   server.on("/config", HTTP_GET, []() {
-    String json = "{";
-    json += "\"apMode\":" + String(useAPMode ? "true" : "false") + ",";
-    json += "\"ssid\":\"" + wifiSSID + "\",";
-    json += "\"btConnected\":" + String(btConnected ? "true" : "false");
-    json += "}";
+    StaticJsonDocument<128> doc;
+    doc["apMode"] = useAPMode;
+    doc["ssid"] = wifiSSID;
+    doc["btConnected"] = btConnected;
+    
+    String json;
+    serializeJson(doc, json);
     server.send(200, "application/json", json);
   });
   server.on("/status", HTTP_GET, handleStatus);
@@ -463,27 +465,27 @@ void handleConfig() {
 }
 
 void handleStatus() {
-  String json = "{";
+  StaticJsonDocument<256> doc;
   
   // WiFi status
   if (useAPMode) {
-    json += "\"wifi\":\"AP Mode - " + WiFi.softAPIP().toString() + "\",";
+    doc["wifi"] = "AP Mode - " + WiFi.softAPIP().toString();
   } else {
     if (WiFi.status() == WL_CONNECTED) {
-      json += "\"wifi\":\"Connected - " + WiFi.localIP().toString() + "\",";
+      doc["wifi"] = "Connected - " + WiFi.localIP().toString();
     } else {
-      json += "\"wifi\":\"Disconnected\",";
+      doc["wifi"] = "Disconnected";
     }
   }
   
   // Bluetooth status
-  json += "\"btConnected\":" + String(SerialBT.connected() ? "true" : "false") + ",";
+  doc["btConnected"] = SerialBT.connected();
   
   // System info
-  json += "\"freeHeap\":" + String(ESP.getFreeHeap()) + ",";
-  json += "\"uptime\":" + String(millis() / 1000);
+  doc["freeHeap"] = ESP.getFreeHeap();
+  doc["uptime"] = millis() / 1000;
   
-  json += "}";
-  
+  String json;
+  serializeJson(doc, json);
   server.send(200, "application/json", json);
 }
