@@ -3,6 +3,7 @@
 #include <WebServer.h>
 #include <BluetoothSerial.h>
 #include <Preferences.h>
+#include <ArduinoJson.h>
 
 // Configuration
 #define DEFAULT_SSID "ThermalPrinter_GW"
@@ -425,31 +426,30 @@ void handlePrint() {
 void handleConfig() {
   String body = server.arg("plain");
   
-  // Simple JSON parsing (for production, use a proper JSON library)
-  // Expected format: {"ssid":"network","password":"pass","apMode":false}
+  // Parse JSON using ArduinoJson library
+  StaticJsonDocument<256> doc;
+  DeserializationError error = deserializeJson(doc, body);
   
-  int ssidStart = body.indexOf("\"ssid\":\"") + 8;
-  int ssidEnd = body.indexOf("\"", ssidStart);
-  
-  int passStart = body.indexOf("\"password\":\"") + 12;
-  int passEnd = body.indexOf("\"", passStart);
-  
-  int apModePos = body.indexOf("\"apMode\":");
-  bool newAPMode = true;
-  
-  if (ssidStart > 7 && ssidEnd > ssidStart) {
-    wifiSSID = body.substring(ssidStart, ssidEnd);
+  if (error) {
+    String errorMsg = "{\"error\":\"Invalid JSON: ";
+    errorMsg += error.c_str();
+    errorMsg += "\"}";
+    server.send(400, "application/json", errorMsg);
+    return;
   }
   
-  if (passStart > 11 && passEnd > passStart) {
-    wifiPassword = body.substring(passStart, passEnd);
+  // Extract configuration values
+  if (doc.containsKey("ssid")) {
+    wifiSSID = doc["ssid"].as<String>();
   }
   
-  if (apModePos > 0) {
-    newAPMode = body.indexOf("true", apModePos) > 0;
+  if (doc.containsKey("password")) {
+    wifiPassword = doc["password"].as<String>();
   }
   
-  useAPMode = newAPMode;
+  if (doc.containsKey("apMode")) {
+    useAPMode = doc["apMode"].as<bool>();
+  }
   
   saveConfig();
   
