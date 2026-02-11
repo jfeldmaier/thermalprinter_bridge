@@ -15,6 +15,7 @@ An ESP32-based gateway that enables sending print jobs via WiFi to a Bluetooth t
 - 📱 **Bluetooth Classic SPP** - Communicates with JK-5803P printer / Kommuniziert mit JK-5803P Drucker
 - 🖥️ **Web Interface** - Easy-to-use web UI for testing / Einfache Web-Oberfläche zum Testen
 - 🔌 **REST API** - Send print jobs programmatically / Druckaufträge programmgesteuert senden
+- 🖼️ **Image Printing** - Print images with automatic conversion to thermal printer format / Bilder drucken mit automatischer Konvertierung
 - 💾 **Persistent Configuration** - Saves WiFi settings / Speichert WiFi-Einstellungen
 - 🔄 **Auto-Reconnection** - Handles connection drops / Behandelt Verbindungsabbrüche
 
@@ -155,6 +156,27 @@ curl -X POST http://192.168.4.1/config \
   -d '{"ssid":"MyWiFi","password":"MyPassword","apMode":false}'
 ```
 
+#### Print Image
+```bash
+# Using Python script (recommended)
+python3 examples/print_image.py logo.png
+
+# Or manually with base64-encoded bitmap data
+curl -X POST http://192.168.4.1/printImage \
+  -H "Content-Type: application/json" \
+  -d '{"data":"<base64-bitmap>","width":384,"height":200}'
+```
+
+Response:
+```json
+{
+  "success": true,
+  "message": "Image print job sent",
+  "width": 384,
+  "height": 200
+}
+```
+
 ## Examples / Beispiele
 
 ### Python Example
@@ -194,6 +216,60 @@ echo -e "Hello World!\nLine 2\nLine 3\n\n\n" | \
   -H "Content-Type: text/plain" \
   --data-binary @-
 ```
+
+### Image Printing Example (Python)
+```python
+#!/usr/bin/env python3
+import requests
+import base64
+from PIL import Image
+
+def print_image(image_path):
+    # Open and convert image
+    img = Image.open(image_path).convert('L')
+    
+    # Resize to max width 384 pixels
+    width, height = img.size
+    if width > 384:
+        height = int(height * (384 / width))
+        img = img.resize((384, height), Image.Resampling.LANCZOS)
+        width = 384
+    
+    # Convert to 1-bit black and white
+    img = img.point(lambda x: 0 if x < 128 else 255, '1')
+    
+    # Convert to bitmap
+    width_bytes = (width + 7) // 8
+    bitmap_data = bytearray(width_bytes * height)
+    pixels = img.load()
+    
+    for y in range(height):
+        for x in range(width):
+            if pixels[x, y] == 0:  # Black pixel
+                byte_idx = y * width_bytes + (x // 8)
+                bit_idx = 7 - (x % 8)
+                bitmap_data[byte_idx] |= (1 << bit_idx)
+    
+    # Encode to base64 and send
+    bitmap_base64 = base64.b64encode(bytes(bitmap_data)).decode('ascii')
+    
+    payload = {
+        "data": bitmap_base64,
+        "width": width,
+        "height": height
+    }
+    
+    response = requests.post(
+        'http://192.168.4.1/printImage',
+        json=payload
+    )
+    print(response.json())
+
+# Usage
+print_image('logo.png')
+```
+
+For a complete working example, see `examples/print_image.py`
 
 ## Troubleshooting / Fehlerbehebung
 

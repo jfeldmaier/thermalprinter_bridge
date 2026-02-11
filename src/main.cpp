@@ -28,12 +28,15 @@ void setupBluetooth();
 void setupWebServer();
 void handleRoot();
 void handlePrint();
+void handlePrintImage();
 void handleConfig();
 void handleStatus();
 void handleCORS();
 void loadConfig();
 void saveConfig();
 void btCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param);
+void printImageData(const uint8_t* imageData, int width, int height);
+uint8_t* base64Decode(const char* input, size_t inputLen, size_t* outputLen);
 
 void setup() {
   Serial.begin(115200);
@@ -181,6 +184,7 @@ void setupWebServer() {
   // Define routes
   server.on("/", HTTP_GET, handleRoot);
   server.on("/print", HTTP_POST, handlePrint);
+  server.on("/printImage", HTTP_POST, handlePrintImage);
   server.on("/config", HTTP_POST, handleConfig);
   server.on("/config", HTTP_GET, []() {
     StaticJsonDocument<128> doc;
@@ -301,6 +305,52 @@ void handleRoot() {
             border-radius: 50%;
             margin-right: 5px;
         }
+        .image-section {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 2px solid #dee2e6;
+        }
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+            margin: 10px 0;
+        }
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            left: -9999px;
+        }
+        .file-input-label {
+            background-color: #28a745;
+            color: white;
+            padding: 12px 30px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            display: inline-block;
+        }
+        .file-input-label:hover {
+            background-color: #218838;
+        }
+        #imagePreview {
+            max-width: 100%;
+            margin: 20px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            display: none;
+        }
+        #imageCanvas {
+            max-width: 100%;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            display: none;
+        }
+        .button-secondary {
+            background-color: #6c757d;
+        }
+        .button-secondary:hover {
+            background-color: #5a6268;
+        }
     </style>
 </head>
 <body>
@@ -316,11 +366,27 @@ void handleRoot() {
         <textarea id="printText" placeholder="Enter text to print...">Hello from WiFi!\nESP32 Thermal Printer Gateway\n\nThis is a test print.\n\n\n\n</textarea>
         <button onclick="sendPrint()" id="printButton">Send to Printer</button>
         
+        <div class="image-section">
+            <h2>🖼️ Print Image</h2>
+            <div class="file-input-wrapper">
+                <label for="imageFile" class="file-input-label">Choose Image File</label>
+                <input type="file" id="imageFile" accept="image/*" onchange="handleImageSelect(event)">
+            </div>
+            <p style="color: #666; font-size: 14px;">Supported formats: JPG, PNG, GIF (max width: 384px recommended)</p>
+            <canvas id="imageCanvas"></canvas>
+            <img id="imagePreview" alt="Preview">
+            <div id="imageControls" style="display: none; margin: 10px 0;">
+                <button onclick="sendImage()" id="printImageButton">Print Image</button>
+                <button onclick="clearImage()" class="button-secondary">Clear</button>
+            </div>
+        </div>
+        
         <div class="info">
             <h3>📡 API Endpoints</h3>
             <ul>
                 <li><strong>GET /status</strong> - Get gateway and printer status</li>
                 <li><strong>POST /print</strong> - Send print job (raw text in body)</li>
+                <li><strong>POST /printImage</strong> - Print image (JSON with base64 data, width, height)</li>
                 <li><strong>GET /config</strong> - Get current configuration</li>
                 <li><strong>POST /config</strong> - Update WiFi configuration</li>
             </ul>
@@ -381,6 +447,139 @@ void handleRoot() {
                 button.disabled = false;
                 button.textContent = 'Send to Printer';
             });
+        }
+        
+        // Image handling variables
+        let currentImageData = null;
+        let currentImageWidth = 0;
+        let currentImageHeight = 0;
+        
+        function handleImageSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    processImage(img);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        function processImage(img) {
+            // Limit width to 384 pixels (48 bytes) for thermal printer
+            const maxWidth = 384;
+            let width = img.width;
+            let height = img.height;
+            
+            if (width > maxWidth) {
+                height = Math.floor(height * (maxWidth / width));
+                width = maxWidth;
+            }
+            
+            // Create canvas and draw image
+            const canvas = document.getElementById('imageCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            canvas.width = width;
+            canvas.height = height;
+            
+            // Draw image
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            // Convert to black and white bitmap
+            const imageData = ctx.getImageData(0, 0, width, height);
+            const pixels = imageData.data;
+            
+            // Apply dithering and convert to 1-bit
+            const threshold = 128;
+            const widthBytes = Math.ceil(width / 8);
+            const bitmapData = new Uint8Array(widthBytes * height);
+            
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const idx = (y * width + x) * 4;
+                    const gray = (pixels[idx] + pixels[idx + 1] + pixels[idx + 2]) / 3;
+                    const isBlack = gray < threshold;
+                    
+                    if (isBlack) {
+                        const byteIdx = y * widthBytes + Math.floor(x / 8);
+                        const bitIdx = 7 - (x % 8);
+                        bitmapData[byteIdx] |= (1 << bitIdx);
+                    }
+                    
+                    // Update canvas to show B&W version
+                    const color = isBlack ? 0 : 255;
+                    pixels[idx] = color;
+                    pixels[idx + 1] = color;
+                    pixels[idx + 2] = color;
+                }
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+            
+            // Show canvas and controls
+            canvas.style.display = 'block';
+            document.getElementById('imageControls').style.display = 'block';
+            
+            // Store bitmap data
+            currentImageData = btoa(String.fromCharCode.apply(null, bitmapData));
+            currentImageWidth = width;
+            currentImageHeight = height;
+            
+            console.log('Image processed: ' + width + 'x' + height + ' pixels');
+        }
+        
+        function sendImage() {
+            if (!currentImageData) {
+                alert('Please select an image first');
+                return;
+            }
+            
+            const button = document.getElementById('printImageButton');
+            button.disabled = true;
+            button.textContent = 'Sending...';
+            
+            const payload = {
+                data: currentImageData,
+                width: currentImageWidth,
+                height: currentImageHeight
+            };
+            
+            fetch('/printImage', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Image sent to printer successfully!');
+                } else {
+                    alert('Error: ' + (data.error || 'Unknown error'));
+                }
+                button.disabled = false;
+                button.textContent = 'Print Image';
+            })
+            .catch(err => {
+                alert('Failed to send image: ' + err);
+                button.disabled = false;
+                button.textContent = 'Print Image';
+            });
+        }
+        
+        function clearImage() {
+            currentImageData = null;
+            currentImageWidth = 0;
+            currentImageHeight = 0;
+            document.getElementById('imageCanvas').style.display = 'none';
+            document.getElementById('imageControls').style.display = 'none';
+            document.getElementById('imageFile').value = '';
         }
         
         // Update status every 2 seconds
@@ -511,5 +710,206 @@ void handleStatus() {
   
   String json;
   serializeJson(doc, json);
+  server.send(200, "application/json", json);
+}
+
+// Base64 decoding function
+uint8_t* base64Decode(const char* input, size_t inputLen, size_t* outputLen) {
+  const char base64_chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  
+  size_t output_length = inputLen / 4 * 3;
+  if (input[inputLen - 1] == '=') output_length--;
+  if (input[inputLen - 2] == '=') output_length--;
+  
+  uint8_t* decoded = (uint8_t*)malloc(output_length);
+  if (decoded == NULL) {
+    *outputLen = 0;
+    return NULL;
+  }
+  
+  size_t j = 0;
+  uint32_t buffer = 0;
+  int bits = 0;
+  
+  for (size_t i = 0; i < inputLen; i++) {
+    if (input[i] == '=') break;
+    
+    const char* p = strchr(base64_chars, input[i]);
+    if (p == NULL) continue;
+    
+    buffer = (buffer << 6) | (p - base64_chars);
+    bits += 6;
+    
+    if (bits >= 8) {
+      bits -= 8;
+      decoded[j++] = (buffer >> bits) & 0xFF;
+    }
+  }
+  
+  *outputLen = j;
+  return decoded;
+}
+
+// Print bitmap image data to thermal printer using ESC/POS commands
+void printImageData(const uint8_t* imageData, int width, int height) {
+  // ESC/POS command for bitmap printing
+  // GS v 0 - Print raster bitmap
+  
+  int widthBytes = (width + 7) / 8;  // Width in bytes (8 pixels per byte)
+  
+  Serial.printf("Printing image: %dx%d pixels (%d bytes wide)\n", width, height, widthBytes);
+  
+  // Send ESC * command for bit image
+  // ESC * m nL nH d1...dk
+  // m = mode (0 = 8-dot single-density)
+  // nL nH = number of dots in horizontal direction (low byte, high byte)
+  
+  for (int y = 0; y < height; y += 24) {
+    int linesThisPass = min(24, height - y);
+    
+    // ESC * 33 (ESC * ! for 24-dot double-density)
+    SerialBT.write(0x1B);  // ESC
+    SerialBT.write(0x2A);  // *
+    SerialBT.write(33);    // 24-dot double-density mode
+    
+    // Width in low byte, high byte
+    SerialBT.write(width & 0xFF);
+    SerialBT.write((width >> 8) & 0xFF);
+    
+    // Send image data for this stripe
+    for (int x = 0; x < width; x++) {
+      for (int k = 0; k < 3; k++) {  // 3 bytes for 24 dots
+        uint8_t byte = 0;
+        for (int b = 0; b < 8; b++) {
+          int py = y + (k * 8) + b;
+          if (py < height) {
+            int byteIndex = py * widthBytes + (x / 8);
+            int bitIndex = 7 - (x % 8);
+            if (imageData[byteIndex] & (1 << bitIndex)) {
+              byte |= (1 << (7 - b));
+            }
+          }
+        }
+        SerialBT.write(byte);
+      }
+    }
+    
+    // Line feed after each stripe
+    SerialBT.write(0x0A);
+  }
+  
+  // Add some line feeds for paper advance
+  SerialBT.print("\n\n\n");
+}
+
+// Handle image upload and print
+void handlePrintImage() {
+  if (!SerialBT.connected()) {
+    StaticJsonDocument<64> doc;
+    doc["error"] = "Printer not connected";
+    String json;
+    serializeJson(doc, json);
+    server.send(503, "application/json", json);
+    Serial.println("Image print request received but printer not connected");
+    return;
+  }
+  
+  String body = server.arg("plain");
+  
+  if (body.length() == 0) {
+    StaticJsonDocument<64> doc;
+    doc["error"] = "No data received";
+    String json;
+    serializeJson(doc, json);
+    server.send(400, "application/json", json);
+    return;
+  }
+  
+  // Parse JSON
+  DynamicJsonDocument doc(body.length() + 1024);
+  DeserializationError error = deserializeJson(doc, body);
+  
+  if (error) {
+    StaticJsonDocument<128> errorDoc;
+    String errorMsg = "Invalid JSON: ";
+    errorMsg += error.c_str();
+    errorDoc["error"] = errorMsg;
+    
+    String json;
+    serializeJson(errorDoc, json);
+    server.send(400, "application/json", json);
+    return;
+  }
+  
+  // Extract image data, width, and height
+  if (!doc.containsKey("data") || !doc.containsKey("width") || !doc.containsKey("height")) {
+    StaticJsonDocument<128> errorDoc;
+    errorDoc["error"] = "Missing required fields: data, width, height";
+    
+    String json;
+    serializeJson(errorDoc, json);
+    server.send(400, "application/json", json);
+    return;
+  }
+  
+  String base64Data = doc["data"].as<String>();
+  int width = doc["width"].as<int>();
+  int height = doc["height"].as<int>();
+  
+  Serial.println("\n--- Image Print Job Received ---");
+  Serial.printf("Image size: %dx%d pixels\n", width, height);
+  Serial.printf("Base64 data length: %d bytes\n", base64Data.length());
+  
+  // Validate dimensions
+  if (width <= 0 || width > 576 || height <= 0 || height > 2000) {
+    StaticJsonDocument<128> errorDoc;
+    errorDoc["error"] = "Invalid image dimensions (max 576x2000)";
+    
+    String json;
+    serializeJson(errorDoc, json);
+    server.send(400, "application/json", json);
+    return;
+  }
+  
+  // Decode base64 image data
+  size_t decodedLen = 0;
+  uint8_t* imageData = base64Decode(base64Data.c_str(), base64Data.length(), &decodedLen);
+  
+  if (imageData == NULL || decodedLen == 0) {
+    StaticJsonDocument<128> errorDoc;
+    errorDoc["error"] = "Failed to decode image data";
+    
+    String json;
+    serializeJson(errorDoc, json);
+    server.send(500, "application/json", json);
+    return;
+  }
+  
+  Serial.printf("Decoded image data: %d bytes\n", decodedLen);
+  
+  // Expected size: (width + 7) / 8 * height bytes
+  int expectedSize = ((width + 7) / 8) * height;
+  
+  if (decodedLen < expectedSize) {
+    Serial.printf("Warning: decoded data (%d bytes) smaller than expected (%d bytes)\n", 
+                  decodedLen, expectedSize);
+  }
+  
+  // Print the image
+  printImageData(imageData, width, height);
+  
+  // Free allocated memory
+  free(imageData);
+  
+  Serial.println("Image sent to printer successfully");
+  
+  StaticJsonDocument<128> responseDoc;
+  responseDoc["success"] = true;
+  responseDoc["message"] = "Image print job sent";
+  responseDoc["width"] = width;
+  responseDoc["height"] = height;
+  
+  String json;
+  serializeJson(responseDoc, json);
   server.send(200, "application/json", json);
 }
