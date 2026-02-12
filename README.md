@@ -34,6 +34,9 @@ An ESP32-based gateway that enables sending print jobs via WiFi to a Bluetooth t
 
 ## Installation / Einrichtung
 
+📖 **Detaillierte deutsche Anleitung:** Siehe [INSTALLATION_DE.md](INSTALLATION_DE.md)  
+⚡ **Schnellreferenz:** Siehe [INSTALLATION_QUICKREF.md](INSTALLATION_QUICKREF.md)
+
 ### Method 1: Using PlatformIO (Recommended)
 
 1. **Install PlatformIO**
