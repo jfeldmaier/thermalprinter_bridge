@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Printing Test - ESP32 Thermal Printer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #007bff;
+            padding-bottom: 10px;
+        }
+        canvas {
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            max-width: 100%;
+            display: block;
+            margin: 20px 0;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .info {
+            background-color: #e7f3ff;
+            padding: 15px;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+            margin: 20px 0;
+        }
+        .code {
+            background-color: #f4f4f4;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🖨️ Image Printing Test</h1>
+        
+        <div class="info">
+            <strong>Test Setup:</strong><br>
+            This page demonstrates the image conversion and printing process for the ESP32 Thermal Printer Gateway.
+        </div>
+        
+        <h2>1. Load Image</h2>
+        <input type="file" id="imageFile" accept="image/*" style="margin: 10px 0;">
+        
+        <h2>2. Preview (Black & White Conversion)</h2>
+        <canvas id="canvas" width="384" height="200"></canvas>
+        
+        <h2>3. Image Data</h2>
+        <div class="info">
+            <strong>Dimensions:</strong> <span id="dimensions">-</span><br>
+            <strong>Bitmap size:</strong> <span id="bitmapSize">-</span><br>
+            <strong>Base64 size:</strong> <span id="base64Size">-</span>
+        </div>
+        
+        <h2>4. Actions</h2>
+        <button onclick="generateTestImage()">Generate Test Pattern</button>
+        <button onclick="downloadBitmap()">Download Bitmap Data</button>
+        
+        <h2>5. JSON Payload Sample</h2>
+        <div class="code" id="jsonSample">
+            Click "Generate Test Pattern" or load an image to see the JSON payload
+        </div>
+    </div>
+    
+    <script>
+        let currentBitmapData = null;
+        
+        document.getElementById('imageFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    processImage(img);
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+        
+        function processImage(img) {
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Calculate dimensions
+            const maxWidth = 384;
+            let width = img.width;
+            let height = img.height;
+            
+            if (width > maxWidth) {
+                height = Math.floor(height * (maxWidth / width));
+                width = maxWidth;
+            }
+            
+            canvas.width = width;
+            canvas.height = height;
+            
+            // Draw image
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            // Convert to black and white
+            const imageData = ctx.getImageData(0, 0, width, height);
+            const pixels = imageData.data;
+            
+            const threshold = 128;
+            const widthBytes = Math.ceil(width / 8);
+            const bitmapData = new Uint8Array(widthBytes * height);
+            
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const idx = (y * width + x) * 4;
+                    const gray = (pixels[idx] + pixels[idx + 1] + pixels[idx + 2]) / 3;
+                    const isBlack = gray < threshold;
+                    
+                    if (isBlack) {
+                        const byteIdx = y * widthBytes + Math.floor(x / 8);
+                        const bitIdx = 7 - (x % 8);
+                        bitmapData[byteIdx] |= (1 << bitIdx);
+                    }
+                    
+                    const color = isBlack ? 0 : 255;
+                    pixels[idx] = color;
+                    pixels[idx + 1] = color;
+                    pixels[idx + 2] = color;
+                }
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+            
+            // Store and display info
+            currentBitmapData = btoa(String.fromCharCode.apply(null, bitmapData));
+            updateInfo(width, height, bitmapData.length);
+        }
+        
+        function generateTestImage() {
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            const width = 384;
+            const height = 200;
+            
+            canvas.width = width;
+            canvas.height = height;
+            
+            // White background
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, width, height);
+            
+            // Black border
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(0, 0, width, height);
+            
+            // Text
+            ctx.fillStyle = 'black';
+            ctx.font = 'bold 24px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('ESP32 Thermal Printer', width / 2, 40);
+            
+            ctx.font = '18px Arial';
+            ctx.fillText('Image Test Pattern', width / 2, 70);
+            
+            // Some shapes
+            ctx.fillRect(50, 100, 80, 60);
+            
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(150, 100, 80, 60);
+            
+            ctx.beginPath();
+            ctx.arc(290, 130, 30, 0, 2 * Math.PI);
+            ctx.fill();
+            
+            // Convert to bitmap
+            const imageData = ctx.getImageData(0, 0, width, height);
+            const pixels = imageData.data;
+            
+            const threshold = 128;
+            const widthBytes = Math.ceil(width / 8);
+            const bitmapData = new Uint8Array(widthBytes * height);
+            
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const idx = (y * width + x) * 4;
+                    const gray = (pixels[idx] + pixels[idx + 1] + pixels[idx + 2]) / 3;
+                    const isBlack = gray < threshold;
+                    
+                    if (isBlack) {
+                        const byteIdx = y * widthBytes + Math.floor(x / 8);
+                        const bitIdx = 7 - (x % 8);
+                        bitmapData[byteIdx] |= (1 << bitIdx);
+                    }
+                }
+            }
+            
+            currentBitmapData = btoa(String.fromCharCode.apply(null, bitmapData));
+            updateInfo(width, height, bitmapData.length);
+        }
+        
+        function updateInfo(width, height, bitmapSize) {
+            document.getElementById('dimensions').textContent = width + 'x' + height + ' pixels';
+            document.getElementById('bitmapSize').textContent = bitmapSize + ' bytes';
+            document.getElementById('base64Size').textContent = currentBitmapData.length + ' characters';
+            
+            const payload = {
+                data: currentBitmapData.substring(0, 100) + '...',
+                width: width,
+                height: height
+            };
+            
+            document.getElementById('jsonSample').textContent = JSON.stringify(payload, null, 2);
+        }
+        
+        function downloadBitmap() {
+            if (!currentBitmapData) {
+                alert('No image data available. Load an image or generate test pattern first.');
+                return;
+            }
+            
+            const canvas = document.getElementById('canvas');
+            const payload = {
+                data: currentBitmapData,
+                width: canvas.width,
+                height: canvas.height
+            };
+            
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'thermal_printer_image.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+        
+        // Generate test pattern on load
+        window.onload = function() {
+            generateTestImage();
+        };
+    </script>
+</body>
+</html>

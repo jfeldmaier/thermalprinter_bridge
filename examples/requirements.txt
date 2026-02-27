@@ -1,0 +1,8 @@
+# Python dependencies for thermal printer examples
+# Install with: pip install -r requirements.txt
+
+# For HTTP requests
+requests>=2.31.0
+
+# For image processing (print_image.py)
+Pillow>=10.0.0

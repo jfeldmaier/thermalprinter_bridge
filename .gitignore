@@ -1,0 +1,48 @@
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+.vscode/
+.clang_complete
+.gcc-flags.json
+
+# Build artifacts
+*.o
+*.a
+*.elf
+*.bin
+*.map
+
+# IDE
+.idea/
+*.sublime-*
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+*~
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# Node.js (if used for testing)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Credentials (never commit these!)
+credentials.h
+secrets.h
+config.local.h
