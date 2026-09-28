@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Thermodrucker</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon.svg">
+<meta name="theme-color" content="#e94560">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Drucker">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#1a1a2e;--card:#16213e;--accent:#0f3460;--hi:#e94560;--txt:#eee;--txt2:#aaa;--ok:#2ecc71;--border:#0f3460;--inp:#0d1b3d;--radius:12px}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--txt);min-height:100vh;padding:12px;max-width:480px;margin:0 auto}
+.toast{position:fixed;top:16px;left:50%;transform:translateX(-50%);padding:10px 24px;border-radius:8px;font-weight:600;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;font-size:14px}
+.toast.ok{background:var(--ok);color:#000}.toast.err{background:var(--hi);color:#fff}.toast.show{opacity:1}
+h1{text-align:center;font-size:1.3em;margin:8px 0 12px;color:var(--hi)}
+.card{background:var(--card);border-radius:var(--radius);padding:14px;margin-bottom:12px;border:1px solid var(--border)}
+.card h2{font-size:1em;margin-bottom:10px;color:var(--hi);display:flex;align-items:center;gap:6px}
+details{background:var(--card);border-radius:var(--radius);margin-bottom:12px;border:1px solid var(--border)}
+details>summary{padding:12px 14px;font-weight:700;cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px;color:var(--hi);font-size:.95em}
+details>summary::-webkit-details-marker{display:none}
+details>summary::before{content:'▶';font-size:.7em;transition:transform .2s}
+details[open]>summary::before{transform:rotate(90deg)}
+details>.inner{padding:0 14px 14px}
+label{display:block;font-size:.85em;color:var(--txt2);margin:8px 0 3px}
+input[type=text],input[type=number],textarea,select{width:100%;padding:8px 10px;background:var(--inp);color:var(--txt);border:1px solid var(--border);border-radius:8px;font-size:14px;outline:none}
+input:focus,textarea:focus,select:focus{border-color:var(--hi)}
+textarea{resize:vertical;min-height:80px;font-family:inherit}
+select{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23aaa'%3E%3Cpath d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 18px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:transform .1s,opacity .2s;color:#fff;width:100%}
+.btn:active{transform:scale(.97)}.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-hi{background:var(--hi)}.btn-ok{background:var(--ok);color:#000}.btn-acc{background:var(--accent)}
+.row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1;min-width:0}
+.fruits{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:6px 0}
+.fruits button{background:var(--inp);border:2px solid transparent;border-radius:8px;padding:8px 0;font-size:22px;cursor:pointer;color:var(--txt);transition:border-color .15s}
+.fruits button.sel{border-color:var(--hi);background:var(--accent)}
+.count-row{display:flex;align-items:center;gap:10px;margin:8px 0}
+.count-row button{width:36px;height:36px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:18px;font-weight:700;cursor:pointer}
+.count-row span{font-size:1.3em;min-width:30px;text-align:center}
+#preview{width:100%;border-radius:8px;background:#fff;margin:8px 0;image-rendering:pixelated}
+.slider-row{display:flex;align-items:center;gap:8px;margin:4px 0}
+.slider-row label{flex:0 0 70px;margin:0;font-size:.8em}
+.slider-row input[type=range]{flex:1;accent-color:var(--hi)}
+.slider-row .val{flex:0 0 40px;text-align:right;font-size:.8em;font-variant-numeric:tabular-nums}
+.cfg-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px}
+.cfg-grid label{margin:4px 0 1px;font-size:.78em}
+.cfg-grid input{padding:6px 8px;font-size:13px}
+#logBox{background:#000;color:#0f0;font-family:monospace;font-size:11px;padding:8px;border-radius:8px;height:200px;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
+.status-dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+.status-dot.on{background:var(--ok)}.status-dot.off{background:var(--hi)}
+.pill{display:inline-block;padding:2px 8px;border-radius:12px;font-size:.75em;font-weight:600}
+.pill.on{background:var(--ok);color:#000}.pill.off{background:var(--hi);color:#fff}
+.txtABtn{flex:1!important;padding:8px!important;font-size:.85em!important}.txtABtn.sel{background:var(--hi)!important}
+</style>
+</head>
+<body>
+<div id="toast" class="toast"></div>
+<h1>🖨️ Thermodrucker</h1>
+
+<!-- STATUS -->
+<div class="card" style="padding:10px 14px;display:flex;align-items:center;gap:10px;font-size:.9em">
+<span id="sDot" class="status-dot off"></span>
+<span id="sTxt">Verbinde…</span>
+<span style="margin-left:auto" id="sPill" class="pill off">Offline</span>
+</div>
+
+<!-- ETIKETTEN -->
+<div class="card">
+<h2>🏷️ Etiketten drucken</h2>
+<label>Zeile 1</label>
+<input type="text" id="line1" placeholder="z.B. Erdbeermarmelade">
+<label>Zeile 2</label>
+<input type="text" id="line2" placeholder="z.B. Juni 2025">
+<label>Zeile 3</label>
+<input type="text" id="line3" placeholder="z.B. Für Oma">
+
+<label>Schriftart</label>
+<select id="fontSel">
+<option value="sans-serif">Sans-Serif (Modern)</option>
+<option value="serif">Serif (Klassisch)</option>
+<option value="monospace">Monospace (Schreibmaschine)</option>
+<option value="system-ui">System-UI</option>
+<option value="cursive">Handschrift</option>
+</select>
+
+<label>Frucht-Symbol</label>
+<div class="fruits" id="fruitGrid"></div>
+
+<label>Anzahl</label>
+<div class="count-row">
+<button onclick="chgCnt(-1)">−</button>
+<span id="cntVal">1</span>
+<button onclick="chgCnt(1)">+</button>
+</div>
+
+<canvas id="lblPrev" style="width:100%;border-radius:8px;background:#fff;margin:8px 0;image-rendering:pixelated"></canvas>
+<button class="btn btn-hi" onclick="printLabels()" id="btnLbl">🖨️ Etiketten drucken</button>
+</div>
+
+<!-- TEXT -->
+<details id="textDetails">
+<summary>📝 Text drucken</summary>
+<div class="inner">
+<textarea id="txtArea" rows="4" placeholder="Text eingeben…"></textarea>
+
+<label>Schriftart</label>
+<select id="txtFont">
+<option value="sans-serif">Sans-Serif (Modern)</option>
+<option value="serif">Serif (Klassisch)</option>
+<option value="monospace">Monospace (Schreibmaschine)</option>
+<option value="system-ui">System-UI</option>
+<option value="cursive">Handschrift</option>
+</select>
+
+<label>Schriftgröße</label>
+<div class="slider-row"><input type="range" id="txtSize" min="12" max="48" value="24" step="2"><span class="val" id="vTxtSize">24</span></div>
+
+<label>Ausrichtung</label>
+<div class="row" style="gap:4px;margin:4px 0 8px">
+<button class="btn btn-acc txtABtn" data-align="left" onclick="setTxtAlign('left')">Links</button>
+<button class="btn btn-acc txtABtn sel" data-align="center" onclick="setTxtAlign('center')">Mitte</button>
+<button class="btn btn-acc txtABtn" data-align="right" onclick="setTxtAlign('right')">Rechts</button>
+</div>
+
+<label style="display:inline-flex;align-items:center;gap:6px;margin:6px 0;cursor:pointer"><input type="checkbox" id="txtBold"> <b>Fett</b></label>
+
+<canvas id="txtPrev" style="width:100%;border-radius:8px;background:#fff;margin:8px 0;image-rendering:pixelated"></canvas>
+<button class="btn btn-hi" onclick="printTextAsImage()" id="btnTxt">🖨️ Text drucken</button>
+</div>
+</details>
+
+<!-- BILD -->
+<details>
+<summary>🖼️ Bild drucken</summary>
+<div class="inner">
+<input type="file" id="imgFile" accept="image/*" style="margin-bottom:8px">
+<label>Dithering</label>
+<select id="ditherSel">
+<option value="floyd">Floyd-Steinberg</option>
+<option value="atkinson">Atkinson</option>
+<option value="stucki">Stucki</option>
+<option value="bayer">Ordered Bayer 8×8</option>
+<option value="threshold">Schwellwert</option>
+</select>
+
+<div class="slider-row"><label>Helligkeit</label><input type="range" id="slBright" min="-100" max="100" value="0"><span class="val" id="vBright">0</span></div>
+<div class="slider-row"><label>Kontrast</label><input type="range" id="slContrast" min="-100" max="100" value="0"><span class="val" id="vContrast">0</span></div>
+<div class="slider-row"><label>Auflösung</label><input type="range" id="slScale" min="25" max="100" value="100" step="5"><span class="val" id="vScale">100%</span></div>
+
+<canvas id="imgPrev" style="width:100%;border-radius:8px;background:#fff;margin:8px 0;image-rendering:pixelated"></canvas>
+<button class="btn btn-hi" onclick="printImage()" id="btnImg">🖨️ Bild drucken</button>
+</div>
+</details>
+
+<!-- EINSTELLUNGEN -->
+<details>
+<summary>⚙️ Einstellungen</summary>
+<div class="inner">
+<p style="font-size:.82em;color:var(--txt2);margin-bottom:8px">Drucklayout-Parameter (config.json)</p>
+<div class="cfg-grid" id="cfgGrid"></div>
+<button class="btn btn-ok" style="margin-top:10px" onclick="saveConfig()">💾 Einstellungen speichern</button>
+</div>
+</details>
+
+<!-- DEBUG LOG -->
+<details>
+<summary>🐛 Debug Log</summary>
+<div class="inner">
+<div id="logBox"></div>
+<button class="btn btn-acc" style="margin-top:6px" onclick="document.getElementById('logBox').textContent=''">🗑️ Löschen</button>
+</div>
+</details>
+
+<script>
+/* ─── Config ─── */
+var CFG = {};
+var CFG_FIELDS = [
+  {key:'labelBorder',label:'Rahmen (px)',type:'number',step:1},
+  {key:'labelPadding',label:'Innenabstand (px)',type:'number',step:1},
+  {key:'labelCutGap',label:'Schnitt-Abstand',type:'number',step:1},
+  {key:'labelFinalFeed',label:'End-Vorschub',type:'number',step:1},
+  {key:'labelMaxFontSize',label:'Max Schriftgröße',type:'number',step:1},
+  {key:'labelMinFontSize',label:'Min Schriftgröße',type:'number',step:1},
+  {key:'labelLineSpacing',label:'Zeilenabstand',type:'number',step:0.1},
+  {key:'labelFontWeight',label:'Schriftstärke',type:'text'},
+  {key:'fruitColWidth',label:'Symbol-Breite (px)',type:'number',step:1}
+];
+
+function loadConfig(){
+  fetch('/config.json').then(r=>r.json()).then(function(c){
+    CFG=c; buildCfgGrid(); applyConfigUI();
+  }).catch(function(){toast('Config laden fehlgeschlagen','err')});
+}
+
+function buildCfgGrid(){
+  var g=document.getElementById('cfgGrid'); g.innerHTML='';
+  CFG_FIELDS.forEach(function(f){
+    var lb=document.createElement('label'); lb.textContent=f.label;
+    var inp=document.createElement('input'); inp.type=f.type; inp.id='cfg_'+f.key;
+    if(f.step) inp.step=f.step;
+    inp.value=CFG[f.key]!=null?CFG[f.key]:'';
+    g.appendChild(lb); g.appendChild(inp);
+  });
+}
+
+function applyConfigUI(){
+  if(CFG.labelFontFamily){
+    var sel=document.getElementById('fontSel');
+    for(var i=0;i<sel.options.length;i++){
+      if(sel.options[i].value===CFG.labelFontFamily) sel.selectedIndex=i;
+    }
+  }
+}
+
+function gatherConfig(){
+  CFG_FIELDS.forEach(function(f){
+    var v=document.getElementById('cfg_'+f.key).value;
+    CFG[f.key]=f.type==='number'?parseFloat(v):v;
+  });
+  CFG.labelFontFamily=document.getElementById('fontSel').value;
+}
+
+function saveConfig(){
+  gatherConfig();
+  fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(CFG)})
+  .then(function(r){if(!r.ok)throw 0;return r.json()})
+  .then(function(){toast('Einstellungen gespeichert','ok')})
+  .catch(function(){toast('Speichern fehlgeschlagen','err')});
+}
+
+/* ─── Toast ─── */
+function toast(m,t){var e=document.getElementById('toast');e.textContent=m;e.className='toast '+(t||'ok')+' show';setTimeout(function(){e.className='toast'},2500)}
+
+/* ─── Status ─── */
+function pollStatus(){
+  fetch('/status').then(function(r){return r.json()}).then(function(s){
+    var c=s.printerReady;
+    document.getElementById('sDot').className='status-dot '+(c?'on':'off');
+    document.getElementById('sTxt').textContent=c?'Drucker verbunden':'Kein Drucker';
+    document.getElementById('sPill').className='pill '+(c?'on':'off');
+    document.getElementById('sPill').textContent=c?'Online':'Offline';
+  }).catch(function(){});
+}
+setInterval(pollStatus,3000); pollStatus();
+
+/* ─── Log ─── */
+function pollLog(){
+  fetch('/log').then(function(r){return r.text()}).then(function(t){
+    if(t.length>0){var b=document.getElementById('logBox');b.textContent+=t;b.scrollTop=b.scrollHeight}
+  }).catch(function(){});
+}
+setInterval(pollLog,2000); pollLog();
+
+/* ─── Fruit Symbols ─── */
+var FRUITS=[
+  {name:'Erdbeere',sym:'🍓'},{name:'Kirsche',sym:'🍒'},{name:'Apfel',sym:'🍎'},
+  {name:'Birne',sym:'🍐'},{name:'Pfirsich',sym:'🍑'},{name:'Traube',sym:'🍇'},
+  {name:'Zitrone',sym:'🍋'},{name:'Orange',sym:'🍊'},{name:'Biene',sym:'🐝'},
+  {name:'Himbeere',sym:'Hi',img:'/himbeere.png'},{name:'Pflaume',sym:'pflaume',custom:true},
+  {name:'Brombeere',sym:'Br',img:'/brombeere.png'},{name:'Johannisb.',sym:'johannisbeere',custom:true}
+];
+
+/* Preload fruit images */
+var fruitImages={};
+FRUITS.forEach(function(f){
+  if(f.img){
+    var im=new Image();
+    im.onload=function(){fruitImages[f.img]=im;renderLabelPreview()};
+    im.src=f.img;
+  }
+});
+var selFruit=-1;
+
+function buildFruits(){
+  var g=document.getElementById('fruitGrid');
+  FRUITS.forEach(function(f,i){
+    var b=document.createElement('button');
+    b.textContent=f.img?f.name.substring(0,2):(f.custom?f.name.substring(0,2):f.sym);
+    b.title=f.name;
+    if(f.custom||f.img){b.style.fontSize='13px';b.style.fontWeight='700'}
+    b.onclick=function(){selFruit=(selFruit===i?-1:i);updFruitSel();renderLabelPreview()};
+    g.appendChild(b);
+  });
+}
+function updFruitSel(){
+  var btns=document.getElementById('fruitGrid').children;
+  for(var i=0;i<btns.length;i++) btns[i].className=(i===selFruit?'sel':'');
+}
+buildFruits();
+
+/* ─── Custom fruit drawing ─── */
+function drawPlum(ctx,x,y,w,h){
+  ctx.fillStyle='#000';var cx=x+w/2,cy=y+h*0.52,rx=w*0.3,ry=h*0.36;
+  ctx.beginPath();ctx.ellipse(cx,cy,rx,ry,0,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.moveTo(cx,cy-ry);ctx.quadraticCurveTo(cx+rx*0.3,cy-ry-h*0.15,cx+rx*0.1,cy-ry-h*0.08);ctx.strokeStyle='#000';ctx.lineWidth=2;ctx.stroke();
+}
+function drawCurrant(ctx,x,y,w,h){
+  ctx.fillStyle='#000';ctx.strokeStyle='#000';ctx.lineWidth=2;
+  var cx=x+w/2,topY=y+h*0.15;
+  ctx.beginPath();ctx.moveTo(cx,topY);ctx.quadraticCurveTo(cx+w*0.1,topY+h*0.5,cx,topY+h*0.75);ctx.stroke();
+  var pts=[{x:cx-w*0.08,y:topY+h*0.3},{x:cx+w*0.1,y:topY+h*0.42},{x:cx-w*0.05,y:topY+h*0.55},{x:cx+w*0.07,y:topY+h*0.65},{x:cx,y:topY+h*0.75}];
+  pts.forEach(function(p){ctx.beginPath();ctx.arc(p.x,p.y,w*0.07,0,Math.PI*2);ctx.fill()});
+}
+
+function renderFruitForPrint(size){
+  var cv=document.createElement('canvas');cv.width=size;cv.height=size;
+  var ctx=cv.getContext('2d');
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,size,size);
+  if(selFruit<0)return null;
+  var f=FRUITS[selFruit];
+  if(f.img&&fruitImages[f.img]){
+    ctx.drawImage(fruitImages[f.img],0,0,size,size);
+    var id2=ctx.getImageData(0,0,size,size),d2=id2.data;
+    for(var j=0;j<d2.length;j+=4){
+      var lum2=d2[j]*0.299+d2[j+1]*0.587+d2[j+2]*0.114;
+      var bw2=lum2>128?255:0;d2[j]=d2[j+1]=d2[j+2]=bw2;
+    }
+    ctx.putImageData(id2,0,0);
+  } else if(f.custom){
+    var fn={pflaume:drawPlum,johannisbeere:drawCurrant}[f.sym];
+    if(fn)fn(ctx,0,0,size,size);
+  } else {
+    ctx.font=Math.floor(size*0.75)+'px serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillStyle='#000';ctx.fillText(f.sym,size/2,size/2);
+    /* B/W threshold for emoji */
+    var id=ctx.getImageData(0,0,size,size),d=id.data;
+    for(var i=0;i<d.length;i+=4){
+      var lum=d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114;
+      var bw=lum>200?255:0;d[i]=d[i+1]=d[i+2]=bw;
+    }
+    ctx.putImageData(id,0,0);
+  }
+  return cv;
+}
+
+/* ─── Label count ─── */
+var lblCount=1;
+function chgCnt(d){lblCount=Math.max(1,Math.min(20,lblCount+d));document.getElementById('cntVal').textContent=lblCount;renderLabelPreview()}
+
+/* ─── Auto-size text ─── */
+function autoSizeText(ctx,lines,maxW,maxH,fontFamily,fontWeight,maxFs,minFs,lineSpacing){
+  for(var fs=maxFs;fs>=minFs;fs--){
+    ctx.font=fontWeight+' '+fs+'px '+fontFamily;
+    var ok=true,totalH=lines.length*fs*lineSpacing;
+    if(totalH>maxH){ok=false}
+    else{ for(var i=0;i<lines.length;i++){if(ctx.measureText(lines[i]).width>maxW){ok=false;break}} }
+    if(ok)return fs;
+  }
+  return minFs;
+}
+
+/* ─── Label rendering ─── */
+function renderLabelPreview(){
+  var W=384;
+  var border=CFG.labelBorder||3,pad=CFG.labelPadding||12;
+  var maxFs=CFG.labelMaxFontSize||28,minFs=CFG.labelMinFontSize||12;
+  var lspc=CFG.labelLineSpacing||1.3;
+  var fontFamily=document.getElementById('fontSel').value;
+  var fontWeight=CFG.labelFontWeight||'bold';
+  var fruitW=CFG.fruitColWidth||80;
+  var hasFruit=selFruit>=0;
+  var lines=[document.getElementById('line1').value,document.getElementById('line2').value,document.getElementById('line3').value].filter(function(l){return l.trim()!==''});
+  if(lines.length===0)lines=['Vorschau'];
+
+  var textAreaW=W-2*border-2*pad-(hasFruit?fruitW+pad:0);
+  var cv=document.getElementById('lblPrev');
+  var ctx=cv.getContext('2d');
+
+  /* measure height */
+  cv.width=W;cv.height=300;
+  var fs=autoSizeText(ctx,lines,textAreaW,200,fontFamily,fontWeight,maxFs,minFs,lspc);
+  var lineH=fs*lspc, textH=lines.length*lineH;
+  var contentH=Math.max(textH,hasFruit?fruitW:0);
+  var H=contentH+2*border+2*pad;
+  cv.height=H;
+
+  /* draw */
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='#000';ctx.lineWidth=border;
+  ctx.strokeRect(border/2,border/2,W-border,H-border);
+
+  /* fruit */
+  if(hasFruit){
+    var fruitCv=renderFruitForPrint(fruitW);
+    if(fruitCv){
+      var fy=border+pad+(contentH-fruitW)/2;
+      ctx.drawImage(fruitCv,border+pad,fy,fruitW,fruitW);
+    }
+  }
+
+  /* text */
+  ctx.fillStyle='#000';ctx.font=fontWeight+' '+fs+'px '+fontFamily;ctx.textAlign='center';ctx.textBaseline='top';
+  var tx=border+pad+(hasFruit?fruitW+pad:0)+textAreaW/2;
+  var ty=border+pad+(contentH-textH)/2;
+  lines.forEach(function(l,i){ctx.fillText(l,tx,ty+i*lineH)});
+}
+
+/* Input listeners for live preview */
+['line1','line2','line3'].forEach(function(id){
+  document.getElementById(id).addEventListener('input',renderLabelPreview);
+});
+document.getElementById('fontSel').addEventListener('change',renderLabelPreview);
+
+/* ─── Build label ESC/POS payload ─── */
+function buildLabelPayload(){
+  var cv=document.getElementById('lblPrev');
+  var ctx=cv.getContext('2d');
+  var id=ctx.getImageData(0,0,cv.width,cv.height);
+  return buildEscPosImage(id.data,cv.width,cv.height);
+}
+
+function buildEscPosImage(rgba,w,h){
+  /* 1-bit MSB, padded to byte boundary per row */
+  var bw=Math.ceil(w/8),bytes=new Uint8Array(bw*h);
+  for(var y=0;y<h;y++){
+    for(var x=0;x<w;x++){
+      var i=(y*w+x)*4,lum=rgba[i]*0.299+rgba[i+1]*0.587+rgba[i+2]*0.114;
+      if(lum<128) bytes[y*bw+Math.floor(x/8)]|=(0x80>>(x%8));
+    }
+  }
+  /* GS v 0 */
+  var cmd=new Uint8Array(8+bw*h);
+  cmd[0]=0x1D;cmd[1]=0x76;cmd[2]=0x30;cmd[3]=0x00;
+  cmd[4]=bw&0xFF;cmd[5]=(bw>>8)&0xFF;
+  cmd[6]=h&0xFF;cmd[7]=(h>>8)&0xFF;
+  cmd.set(bytes,8);
+  return cmd;
+}
+
+/* ─── Print labels ─── */
+function printLabels(){
+  var btn=document.getElementById('btnLbl');btn.disabled=true;btn.textContent='⏳ Drucke…';
+  var payload=buildLabelPayload();
+  var cutGap=CFG.labelCutGap||40, finalFeed=CFG.labelFinalFeed||80;
+  var n=lblCount;
+
+  /* Build full payload: n labels with gaps + final feed */
+  var parts=[];
+  for(var i=0;i<n;i++){
+    parts.push(payload);
+    if(i<n-1){
+      /* gap between labels: ESC d lines */
+      var gapLines=Math.round(cutGap/8)||5;
+      var g=new Uint8Array(3);g[0]=0x1B;g[1]=0x64;g[2]=gapLines;
+      parts.push(g);
+    }
+  }
+  /* final feed */
+  var ff=new Uint8Array(3);ff[0]=0x1B;ff[1]=0x64;ff[2]=Math.round(finalFeed/8)||8;
+  parts.push(ff);
+
+  var total=0;parts.forEach(function(p){total+=p.length});
+  var buf=new Uint8Array(total),off=0;
+  parts.forEach(function(p){buf.set(p,off);off+=p.length});
+
+  sendBinary('/printImage',buf).then(function(){
+    toast('Etiketten gedruckt','ok');
+  }).catch(function(e){toast('Fehler: '+e,'err')}).finally(function(){
+    btn.disabled=false;btn.textContent='🖨️ Etiketten drucken';
+  });
+}
+
+/* ─── Text print with preview ─── */
+var txtAlign='center';
+function setTxtAlign(a){
+  txtAlign=a;
+  var btns=document.querySelectorAll('.txtABtn');
+  for(var i=0;i<btns.length;i++) btns[i].classList.toggle('sel',btns[i].getAttribute('data-align')===a);
+  renderTextPreview();
+}
+
+function wrapTextLines(ctx,text,maxW){
+  var allLines=[];
+  var paragraphs=text.split('\n');
+  for(var p=0;p<paragraphs.length;p++){
+    var para=paragraphs[p];
+    if(para.trim()===''){allLines.push('');continue}
+    var words=para.split(/\s+/);
+    var line='';
+    for(var w=0;w<words.length;w++){
+      var test=line?(line+' '+words[w]):words[w];
+      if(ctx.measureText(test).width>maxW&&line){
+        allLines.push(line);
+        line=words[w];
+      } else {
+        line=test;
+      }
+    }
+    if(line) allLines.push(line);
+  }
+  return allLines;
+}
+
+function renderTextPreview(){
+  var W=384, pad=10;
+  var text=document.getElementById('txtArea').value;
+  if(!text.trim()) text='Vorschau';
+  var font=document.getElementById('txtFont').value;
+  var size=parseInt(document.getElementById('txtSize').value);
+  var bold=document.getElementById('txtBold').checked;
+  var fontStr=(bold?'bold ':'')+size+'px '+font;
+
+  var cv=document.getElementById('txtPrev');
+  var ctx=cv.getContext('2d');
+  cv.width=W; cv.height=2000;
+  ctx.font=fontStr;
+
+  var lines=wrapTextLines(ctx,text,W-2*pad);
+  var lineH=Math.round(size*1.35);
+  var H=lines.length*lineH+2*pad;
+  cv.height=Math.max(H,size+2*pad);
+
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,W,cv.height);
+  ctx.fillStyle='#000';
+  ctx.font=fontStr;
+  ctx.textBaseline='top';
+  ctx.textAlign=txtAlign;
+
+  var tx=txtAlign==='left'?pad:(txtAlign==='right'?W-pad:W/2);
+  for(var i=0;i<lines.length;i++){
+    ctx.fillText(lines[i],tx,pad+i*lineH);
+  }
+}
+
+function printTextAsImage(){
+  var text=document.getElementById('txtArea').value.trim();
+  if(!text){toast('Kein Text eingegeben','err');return}
+  renderTextPreview();
+  var cv=document.getElementById('txtPrev');
+  var btn=document.getElementById('btnTxt');btn.disabled=true;btn.textContent='⏳ Drucke…';
+  var ctx=cv.getContext('2d'),id=ctx.getImageData(0,0,cv.width,cv.height);
+  var cmd=buildEscPosImage(id.data,cv.width,cv.height);
+  var ff=new Uint8Array(3);ff[0]=0x1B;ff[1]=0x64;ff[2]=4;
+  var buf=new Uint8Array(cmd.length+ff.length);buf.set(cmd);buf.set(ff,cmd.length);
+  sendBinary('/printImage',buf).then(function(){
+    toast('Text gedruckt','ok');
+  }).catch(function(e){toast('Fehler: '+e,'err')}).finally(function(){
+    btn.disabled=false;btn.textContent='🖨️ Text drucken';
+  });
+}
+
+/* Text preview listeners */
+document.getElementById('txtArea').addEventListener('input',renderTextPreview);
+document.getElementById('txtFont').addEventListener('change',renderTextPreview);
+document.getElementById('txtSize').addEventListener('input',function(){
+  document.getElementById('vTxtSize').textContent=this.value;
+  renderTextPreview();
+});
+document.getElementById('txtBold').addEventListener('change',renderTextPreview);
+document.getElementById('textDetails').addEventListener('toggle',function(){
+  if(this.open) setTimeout(renderTextPreview,50);
+});
+
+/* ─── Image print with brightness/contrast/scale ─── */
+var imgGrayOrig=null, imgOrigW=0, imgOrigH=0;
+
+document.getElementById('imgFile').addEventListener('change',function(e){
+  var f=e.target.files[0];if(!f)return;
+  var img=new Image();
+  img.onload=function(){
+    imgOrigW=img.width;imgOrigH=img.height;
+    var maxW=384;
+    var scale=Math.min(1,maxW/img.width);
+    var w=Math.round(img.width*scale),h=Math.round(img.height*scale);
+    var cv=document.createElement('canvas');cv.width=w;cv.height=h;
+    var ctx=cv.getContext('2d');ctx.drawImage(img,0,0,w,h);
+    var id=ctx.getImageData(0,0,w,h),d=id.data;
+    imgGrayOrig=new Uint8Array(w*h);
+    for(var i=0;i<w*h;i++){
+      imgGrayOrig[i]=Math.round(d[i*4]*0.299+d[i*4+1]*0.587+d[i*4+2]*0.114);
+    }
+    processImage();
+  };
+  img.src=URL.createObjectURL(f);
+});
+
+['slBright','slContrast','slScale'].forEach(function(id){
+  document.getElementById(id).addEventListener('input',function(){
+    document.getElementById('vBright').textContent=document.getElementById('slBright').value;
+    document.getElementById('vContrast').textContent=document.getElementById('slContrast').value;
+    document.getElementById('vScale').textContent=document.getElementById('slScale').value+'%';
+    if(imgGrayOrig)processImage();
+  });
+});
+
+function processImage(){
+  if(!imgGrayOrig)return;
+  var bright=parseInt(document.getElementById('slBright').value);
+  var contrast=parseInt(document.getElementById('slContrast').value);
+  var scalePct=parseInt(document.getElementById('slScale').value);
+
+  /* determine dimensions from original gray */
+  var maxW=384;
+  var origScale=Math.min(1,maxW/imgOrigW);
+  var baseW=Math.round(imgOrigW*origScale),baseH=Math.round(imgOrigH*origScale);
+
+  /* apply resolution scale */
+  var sw=Math.round(baseW*scalePct/100),sh=Math.round(baseH*scalePct/100);
+  if(sw<8)sw=8;if(sh<8)sh=8;
+
+  /* resample if needed */
+  var gray;
+  if(scalePct<100){
+    gray=resampleGray(imgGrayOrig,baseW,baseH,sw,sh);
+  } else {
+    gray=new Uint8Array(imgGrayOrig);
+    sw=baseW;sh=baseH;
+  }
+
+  /* brightness & contrast */
+  var factor=(259*(contrast+255))/(255*(259-contrast));
+  for(var i=0;i<gray.length;i++){
+    var v=gray[i]+bright;
+    v=factor*(v-128)+128;
+    gray[i]=Math.max(0,Math.min(255,Math.round(v)));
+  }
+
+  /* dither */
+  var algo=document.getElementById('ditherSel').value;
+  var bw=applyDither(gray,sw,sh,algo);
+
+  /* render preview */
+  var cv=document.getElementById('imgPrev');cv.width=sw;cv.height=sh;
+  var ctx=cv.getContext('2d');
+  var id=ctx.createImageData(sw,sh);
+  for(var i=0;i<bw.length;i++){
+    var v=bw[i]?255:0;
+    id.data[i*4]=v;id.data[i*4+1]=v;id.data[i*4+2]=v;id.data[i*4+3]=255;
+  }
+  ctx.putImageData(id,0,0);
+}
+
+function resampleGray(src,sw,sh,dw,dh){
+  var dst=new Uint8Array(dw*dh);
+  var xr=sw/dw,yr=sh/dh;
+  for(var y=0;y<dh;y++){
+    for(var x=0;x<dw;x++){
+      var sx=Math.min(Math.floor(x*xr),sw-1),sy=Math.min(Math.floor(y*yr),sh-1);
+      dst[y*dw+x]=src[sy*sw+sx];
+    }
+  }
+  return dst;
+}
+
+/* ─── Dithering Algorithms ─── */
+function applyDither(gray,w,h,algo){
+  var out=new Uint8Array(w*h);
+  if(algo==='threshold'){
+    for(var i=0;i<gray.length;i++) out[i]=gray[i]<128?0:1;
+    return out;
+  }
+  if(algo==='bayer') return bayerDither(gray,w,h);
+  /* Error diffusion */
+  var g=new Float32Array(gray);
+  var kernels={
+    floyd:[[1,0,7/16],[-1,1,3/16],[0,1,5/16],[1,1,1/16]],
+    atkinson:[[1,0,1/8],[2,0,1/8],[-1,1,1/8],[0,1,1/8],[1,1,1/8],[0,2,1/8]],
+    stucki:[[1,0,8/42],[2,0,4/42],[-2,1,2/42],[-1,1,4/42],[0,1,8/42],[1,1,4/42],[2,1,2/42],[-2,2,1/42],[-1,2,2/42],[0,2,4/42],[1,2,2/42],[2,2,1/42]]
+  };
+  var k=kernels[algo]||kernels.floyd;
+  for(var y=0;y<h;y++){
+    for(var x=0;x<w;x++){
+      var i=y*w+x,old=g[i],nw=old<128?0:255;
+      out[i]=nw?1:0;
+      var err=old-nw;
+      for(var j=0;j<k.length;j++){
+        var nx=x+k[j][0],ny=y+k[j][1];
+        if(nx>=0&&nx<w&&ny<h) g[ny*w+nx]+=err*k[j][2];
+      }
+    }
+  }
+  return out;
+}
+
+function bayerDither(gray,w,h){
+  var M=[[0,48,12,60,3,51,15,63],[32,16,44,28,35,19,47,31],[8,56,4,52,11,59,7,55],[40,24,36,20,43,27,39,23],[2,50,14,62,1,49,13,61],[34,18,46,30,33,17,45,29],[10,58,6,54,9,57,5,53],[42,26,38,22,41,25,37,21]];
+  var out=new Uint8Array(w*h);
+  for(var y=0;y<h;y++){
+    for(var x=0;x<w;x++){
+      var t=(M[y%8][x%8]+0.5)/64*255;
+      out[y*w+x]=gray[y*w+x]>t?1:0;
+    }
+  }
+  return out;
+}
+
+/* ─── Print image ─── */
+function printImage(){
+  var cv=document.getElementById('imgPrev');
+  if(cv.width<2){toast('Kein Bild geladen','err');return}
+  var btn=document.getElementById('btnImg');btn.disabled=true;btn.textContent='⏳ Drucke…';
+  var ctx=cv.getContext('2d'),id=ctx.getImageData(0,0,cv.width,cv.height);
+  var cmd=buildEscPosImage(id.data,cv.width,cv.height);
+  /* add final feed */
+  var ff=new Uint8Array(3);ff[0]=0x1B;ff[1]=0x64;ff[2]=4;
+  var buf=new Uint8Array(cmd.length+ff.length);buf.set(cmd);buf.set(ff,cmd.length);
+  sendBinary('/printImage',buf).then(function(){
+    toast('Bild gedruckt','ok');
+  }).catch(function(e){toast('Fehler: '+e,'err')}).finally(function(){
+    btn.disabled=false;btn.textContent='🖨️ Bild drucken';
+  });
+}
+
+/* ─── HTTP helpers ─── */
+function sendBinary(url,data){
+  return fetch(url,{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:data})
+  .then(function(r){if(!r.ok)throw 'HTTP '+r.status;return r.json()});
+}
+
+/* ─── Init ─── */
+loadConfig();
+setTimeout(renderLabelPreview,300);
+setTimeout(renderTextPreview,350);
+</script>
+</body>
+</html>

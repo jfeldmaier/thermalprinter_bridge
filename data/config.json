@@ -1,0 +1,12 @@
+{
+  "labelBorder": 3,
+  "labelPadding": 12,
+  "labelCutGap": 40,
+  "labelFinalFeed": 80,
+  "labelMaxFontSize": 28,
+  "labelMinFontSize": 12,
+  "labelLineSpacing": 1.3,
+  "labelFontFamily": "sans-serif",
+  "labelFontWeight": "bold",
+  "fruitColWidth": 80
+}
